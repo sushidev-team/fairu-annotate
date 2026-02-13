@@ -23,7 +23,9 @@ export function useYoloExport({ images, labels, yoloFormat = 'auto' }: UseYoloEx
     const state = annotationStore.getState()
     return images
       .map((img) => {
-        const annotations = state.getAnnotations(img.id)
+        const allAnnotations = state.getAnnotations(img.id)
+        // Filter out classification annotations from spatial export
+        const annotations = allAnnotations.filter((a) => a.type !== 'classification')
         if (annotations.length === 0) return null
         const w = img.naturalWidth ?? 1
         const h = img.naturalHeight ?? 1

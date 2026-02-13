@@ -25,6 +25,7 @@ interface ToolbarProps {
   readOnly?: boolean
   showIcons?: boolean
   showLabelDots?: boolean
+  mode?: 'annotate' | 'classify'
   className?: string
 }
 
@@ -58,7 +59,7 @@ const viewTools: { id: Tool; label: string; shortcut: string; icon: React.ReactN
   },
 ]
 
-export function Toolbar({ onExport, labels, locked = false, readOnly = false, showIcons = true, showLabelDots = true, className = '' }: ToolbarProps) {
+export function Toolbar({ onExport, labels, locked = false, readOnly = false, showIcons = true, showLabelDots = true, mode = 'annotate', className = '' }: ToolbarProps) {
   const activeTool = useUIStore((s) => s.tool)
   const setTool = useUIStore((s) => s.setTool)
   const zoom = useUIStore((s) => s.zoom)
@@ -86,8 +87,8 @@ export function Toolbar({ onExport, labels, locked = false, readOnly = false, sh
           )}
         </Button>
       )}
-      {/* Draw tools — hidden when locked */}
-      {!locked &&
+      {/* Draw tools — hidden when locked or in classify mode */}
+      {!locked && mode !== 'classify' &&
         drawTools.map((t) => (
           <Button
             key={t.id}
@@ -111,8 +112,8 @@ export function Toolbar({ onExport, labels, locked = false, readOnly = false, sh
           {showIcons ? t.icon : <span className="text-xs font-semibold w-4 h-4 flex items-center justify-center">{t.shortcut}</span>}
         </Button>
       ))}
-      {/* Label selector */}
-      {labels && labels.length > 0 && (
+      {/* Label selector — hidden in classify mode */}
+      {labels && labels.length > 0 && mode !== 'classify' && (
         <>
           <div className="w-px h-5 bg-zinc-200 dark:bg-zinc-700 mx-1" />
           <LabelSelector labels={labels} disabled={locked} showDots={showLabelDots} />

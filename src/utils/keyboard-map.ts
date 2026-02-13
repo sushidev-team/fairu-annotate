@@ -15,6 +15,7 @@ export const DEFAULT_SHORTCUTS: Required<KeyboardShortcutMap> = {
   'label.quick': '1-9',
   'export': 'ctrl+s',
   'view.lock': 'l',
+  'image.confirm': 'Enter',
 }
 
 export function matchesShortcut(e: KeyboardEvent, shortcut: string): boolean {

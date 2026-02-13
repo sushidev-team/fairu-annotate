@@ -37,7 +37,7 @@ export interface YoloOBB {
   ]
 }
 
-export type AnnotationType = 'box' | 'polygon' | 'obb'
+export type AnnotationType = 'box' | 'polygon' | 'obb' | 'classification'
 
 export interface Annotation {
   id: string

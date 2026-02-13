@@ -35,6 +35,7 @@ export interface KeyboardShortcutMap {
   'label.quick'?: string
   'export'?: string
   'view.lock'?: string
+  'image.confirm'?: string
 }
 
 export interface ImageAnnotatorProps {
@@ -56,4 +57,6 @@ export interface ImageAnnotatorProps {
   readOnly?: boolean
   showToolbarIcons?: boolean
   showLabelDots?: boolean
+  mode?: 'annotate' | 'classify'
+  labelKeyBindings?: Record<string, string>
 }

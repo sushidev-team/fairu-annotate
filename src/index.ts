@@ -6,6 +6,7 @@ export { Toolbar } from './components/Toolbar/Toolbar'
 export { Pagination } from './components/Pagination/Pagination'
 export { DataPreview } from './components/DataPreview/DataPreview'
 export { LabelSelector } from './components/Toolbar/LabelSelector'
+export { ClassificationList } from './components/ClassificationList/ClassificationList'
 
 // Hooks
 export { useYoloExport } from './hooks/use-yolo-export'
@@ -26,6 +27,7 @@ export {
   fromYoloOBB,
   detectYoloFormat,
   parseYoloAutoTxt,
+  toYoloClassificationTxt,
 } from './utils/yolo-format'
 
 // Utils — Geometry

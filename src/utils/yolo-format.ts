@@ -405,3 +405,27 @@ export function parseYoloAutoTxt(
   }
   return results
 }
+
+// ---------------------------------------------------------------------------
+// Classification format
+// ---------------------------------------------------------------------------
+
+/**
+ * Converts classification annotations to YOLO classification format.
+ * Outputs one class ID per line.
+ */
+export function toYoloClassificationTxt(
+  annotations: Annotation[],
+  labels: Label[],
+): string {
+  const labelMap = new Map(labels.map((l) => [l.id, l.classId]))
+  return annotations
+    .filter((a) => a.type === 'classification')
+    .map((a) => {
+      const classId = labelMap.get(a.labelId)
+      if (classId === undefined) return null
+      return `${classId}`
+    })
+    .filter(Boolean)
+    .join('\n')
+}

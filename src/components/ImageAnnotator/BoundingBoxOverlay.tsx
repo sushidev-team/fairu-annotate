@@ -134,7 +134,7 @@ export function BoundingBoxOverlay({
       onClick={handleBackgroundClick}
     >
       <g transform={`translate(${panX}, ${panY}) scale(${zoom})`}>
-        {annotations.map((a) => {
+        {annotations.filter((a) => a.type !== 'classification').map((a) => {
           const label = labelMap.get(a.labelId)
           const color = label?.color ?? '#999'
           const isSelected = a.id === selectedId

@@ -18,6 +18,7 @@ import { Canvas } from './Canvas'
 import { BoundingBoxOverlay } from './BoundingBoxOverlay'
 import { Toolbar } from '../Toolbar/Toolbar'
 import { AnnotationList } from '../AnnotationList/AnnotationList'
+import { ClassificationList } from '../ClassificationList/ClassificationList'
 import { TagManager } from '../TagManager/TagManager'
 import { Pagination } from '../Pagination/Pagination'
 import { DataPreview } from '../DataPreview/DataPreview'
@@ -45,7 +46,11 @@ function ImageAnnotatorInner({
   readOnly = false,
   showToolbarIcons = true,
   showLabelDots = true,
+  mode = 'annotate',
+  labelKeyBindings,
 }: ImageAnnotatorProps) {
+  const isClassify = mode === 'classify'
+
   const containerRef = useRef<HTMLDivElement>(null)
   const currentIndex = useUIStore((s) => s.currentImageIndex)
   const tool = useUIStore((s) => s.tool)
@@ -80,6 +85,7 @@ function ImageAnnotatorInner({
 
   const annotationStoreApi = useAnnotationStoreApi()
   const addAnnotation = useAnnotationStore((s) => s.addAnnotation)
+  const removeAnnotation = useAnnotationStore((s) => s.removeAnnotation)
   const updateAnnotation = useAnnotationStore((s) => s.updateAnnotation)
   const currentAnnotations = useAnnotationStore(
     (s) => s.annotations[imagesProp[currentIndex]?.id] ?? EMPTY_ANNOTATIONS,
@@ -119,6 +125,13 @@ function ImageAnnotatorInner({
     }
   }, [activeLabelId, labels, setActiveLabel])
 
+  // Force tool to 'select' in classify mode
+  useEffect(() => {
+    if (isClassify && (tool === 'draw' || tool === 'polygon')) {
+      uiStoreApi.getState().setTool('select')
+    }
+  }, [isClassify, tool, uiStoreApi])
+
   // Notify parent on annotation changes
   useEffect(() => {
     if (onAnnotationsChange && currentImage) {
@@ -133,12 +146,37 @@ function ImageAnnotatorInner({
     onExport?.(data)
   }, [exportAll, onExport])
 
+  // Classification toggle callback
+  const handleToggleClassification = useCallback(
+    (labelId: string) => {
+      if (isLocked || !currentImage) return
+      const existing = currentAnnotations.find(
+        (a) => a.type === 'classification' && a.labelId === labelId,
+      )
+      if (existing) {
+        removeAnnotation(existing.id, currentImage.id)
+      } else {
+        addAnnotation({
+          id: nextId(),
+          imageId: currentImage.id,
+          labelId,
+          type: 'classification',
+          box: { x: 0, y: 0, width: 1, height: 1 },
+        })
+      }
+    },
+    [isLocked, currentImage, currentAnnotations, addAnnotation, removeAnnotation],
+  )
+
   useKeyboardShortcuts({
     shortcuts: keyboardShortcuts,
     labels,
     imageCount: imagesProp.length,
     onExport: onExport ? handleExport : undefined,
     locked: isLocked,
+    mode,
+    labelKeyBindings,
+    onToggleClassification: isClassify ? handleToggleClassification : undefined,
   })
 
   const imageWidth = loadedImage?.naturalWidth ?? 800
@@ -182,7 +220,7 @@ function ImageAnnotatorInner({
 
   const handleDrawComplete = useCallback(
     (box: BoundingBox) => {
-      if (isLocked) return
+      if (isLocked || isClassify) return
       const labelId = uiStoreApi.getState().activeLabelId
       if (!labelId || !currentImage) return
       addAnnotation({
@@ -192,12 +230,12 @@ function ImageAnnotatorInner({
         box,
       })
     },
-    [addAnnotation, currentImage, uiStoreApi, isLocked],
+    [addAnnotation, currentImage, uiStoreApi, isLocked, isClassify],
   )
 
   const handlePolygonDrawComplete = useCallback(
     (points: PolygonPoint[], bounds: BoundingBox) => {
-      if (isLocked) return
+      if (isLocked || isClassify) return
       const labelId = uiStoreApi.getState().activeLabelId
       if (!labelId || !currentImage) return
       addAnnotation({
@@ -209,7 +247,7 @@ function ImageAnnotatorInner({
         polygon: points,
       })
     },
-    [addAnnotation, currentImage, uiStoreApi, isLocked],
+    [addAnnotation, currentImage, uiStoreApi, isLocked, isClassify],
   )
 
   const { currentBox: drawingBox, handlers: drawHandlers } = useCanvasDrawing({
@@ -239,10 +277,10 @@ function ImageAnnotatorInner({
 
   // Register polygon keyboard handler (Escape/Enter)
   useEffect(() => {
-    if (tool !== 'polygon' || isLocked) return
+    if (tool !== 'polygon' || isLocked || isClassify) return
     window.addEventListener('keydown', polygonKeyDown)
     return () => window.removeEventListener('keydown', polygonKeyDown)
-  }, [tool, polygonKeyDown, isLocked])
+  }, [tool, polygonKeyDown, isLocked, isClassify])
 
   // Cancel polygon drawing when switching away from polygon tool
   useEffect(() => {
@@ -281,11 +319,11 @@ function ImageAnnotatorInner({
     (e: React.MouseEvent) => {
       if (tool === 'pan') {
         panRef.current = { isPanning: true, lastX: e.clientX, lastY: e.clientY }
-      } else if (tool === 'draw' && !isLocked) {
+      } else if (tool === 'draw' && !isLocked && !isClassify) {
         drawHandlers.onMouseDown(e)
       }
     },
-    [tool, drawHandlers, isLocked],
+    [tool, drawHandlers, isLocked, isClassify],
   )
 
   const handleContainerMouseMove = useCallback(
@@ -296,13 +334,13 @@ function ImageAnnotatorInner({
         setPan(panX + dx / fitScale, panY + dy / fitScale)
         panRef.current.lastX = e.clientX
         panRef.current.lastY = e.clientY
-      } else if (tool === 'draw' && !isLocked) {
+      } else if (tool === 'draw' && !isLocked && !isClassify) {
         drawHandlers.onMouseMove(e)
-      } else if (tool === 'polygon' && !isLocked) {
+      } else if (tool === 'polygon' && !isLocked && !isClassify) {
         polygonHandlers.onMouseMove(e)
       }
     },
-    [tool, panX, panY, setPan, drawHandlers, polygonHandlers, fitScale, isLocked],
+    [tool, panX, panY, setPan, drawHandlers, polygonHandlers, fitScale, isLocked, isClassify],
   )
 
   const handleContainerMouseUp = useCallback(() => {
@@ -312,7 +350,7 @@ function ImageAnnotatorInner({
 
   const handleContainerClick = useCallback(
     (e: React.MouseEvent) => {
-      if (tool !== 'polygon' || isLocked) return
+      if (tool !== 'polygon' || isLocked || isClassify) return
       // Delay single-click to distinguish from double-click
       if (polygonClickTimer.current) {
         clearTimeout(polygonClickTimer.current)
@@ -330,12 +368,12 @@ function ImageAnnotatorInner({
         polygonHandlers.onClick(clickData as unknown as React.MouseEvent<Element>)
       }, 200)
     },
-    [tool, polygonHandlers, isLocked],
+    [tool, polygonHandlers, isLocked, isClassify],
   )
 
   const handleContainerDoubleClick = useCallback(
     (e: React.MouseEvent) => {
-      if (tool === 'polygon' && !isLocked) {
+      if (tool === 'polygon' && !isLocked && !isClassify) {
         // Cancel the pending single-click
         if (polygonClickTimer.current) {
           clearTimeout(polygonClickTimer.current)
@@ -344,7 +382,7 @@ function ImageAnnotatorInner({
         polygonHandlers.onDoubleClick(e)
       }
     },
-    [tool, polygonHandlers, isLocked],
+    [tool, polygonHandlers, isLocked, isClassify],
   )
 
   // Wheel zoom
@@ -362,8 +400,9 @@ function ImageAnnotatorInner({
   const activeLabel = labels.find((l) => l.id === activeLabelId)
   const drawingColor = activeLabel?.color ?? '#3B82F6'
 
-  const cursorClass =
-    !isLocked && (tool === 'draw' || tool === 'polygon') ? 'cursor-crosshair' : tool === 'pan' ? 'cursor-grab' : 'cursor-default'
+  const cursorClass = isClassify
+    ? (tool === 'pan' ? 'cursor-grab' : 'cursor-default')
+    : (!isLocked && (tool === 'draw' || tool === 'polygon') ? 'cursor-crosshair' : tool === 'pan' ? 'cursor-grab' : 'cursor-default')
 
   // Make component focusable for keyboard shortcuts
   const rootRef = useRef<HTMLDivElement>(null)
@@ -386,7 +425,16 @@ function ImageAnnotatorInner({
           onTagCreate={onTagCreate}
           onTagDelete={onTagDelete}
         />
-        {currentImage && (
+        {currentImage && isClassify && (
+          <ClassificationList
+            imageId={currentImage.id}
+            labels={labels}
+            labelKeyBindings={labelKeyBindings}
+            locked={isLocked}
+            onToggle={handleToggleClassification}
+          />
+        )}
+        {currentImage && !isClassify && (
           <AnnotationList imageId={currentImage.id} labels={labels} locked={isLocked} />
         )}
       </div>
@@ -402,6 +450,7 @@ function ImageAnnotatorInner({
             readOnly={readOnly}
             showIcons={showToolbarIcons}
             showLabelDots={showLabelDots}
+            mode={mode}
           />
           <div className="flex-1" />
           <Pagination images={imagesProp} />
@@ -434,26 +483,28 @@ function ImageAnnotatorInner({
                 zoom={effectiveZoom}
                 panX={centeredPanX}
                 panY={centeredPanY}
-                drawingBox={!isLocked ? drawingBox : null}
+                drawingBox={!isLocked && !isClassify ? drawingBox : null}
                 drawingColor={drawingColor}
                 containerWidth={containerSize.width}
                 containerHeight={containerSize.height}
-                showCrosshair={!isLocked && (tool === 'draw' || tool === 'polygon')}
-                polygonPoints={!isLocked && tool === 'polygon' ? polygonPoints : undefined}
-                polygonMousePos={!isLocked && tool === 'polygon' ? polygonMousePos : undefined}
+                showCrosshair={!isLocked && !isClassify && (tool === 'draw' || tool === 'polygon')}
+                polygonPoints={!isLocked && !isClassify && tool === 'polygon' ? polygonPoints : undefined}
+                polygonMousePos={!isLocked && !isClassify && tool === 'polygon' ? polygonMousePos : undefined}
               />
-              <BoundingBoxOverlay
-                annotations={currentAnnotations}
-                labels={labels}
-                selectedId={selectedId}
-                zoom={effectiveZoom}
-                panX={centeredPanX}
-                panY={centeredPanY}
-                onSelect={setSelected}
-                onUpdate={handleBoxUpdate}
-                tool={tool}
-                locked={isLocked}
-              />
+              {!isClassify && (
+                <BoundingBoxOverlay
+                  annotations={currentAnnotations}
+                  labels={labels}
+                  selectedId={selectedId}
+                  zoom={effectiveZoom}
+                  panX={centeredPanX}
+                  panY={centeredPanY}
+                  onSelect={setSelected}
+                  onUpdate={handleBoxUpdate}
+                  tool={tool}
+                  locked={isLocked}
+                />
+              )}
             </div>
           )}
         </div>
@@ -466,6 +517,7 @@ function ImageAnnotatorInner({
             yoloFormat={yoloFormat}
             imageWidth={imageWidth}
             imageHeight={imageHeight}
+            mode={mode}
           />
         )}
       </div>

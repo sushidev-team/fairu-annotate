@@ -14,11 +14,12 @@ interface AnnotationListProps {
 }
 
 export function AnnotationList({ imageId, labels, locked = false, className = '' }: AnnotationListProps) {
-  const annotations = useAnnotationStore((s) => s.annotations[imageId] ?? EMPTY_ANNOTATIONS)
+  const allAnnotations = useAnnotationStore((s) => s.annotations[imageId] ?? EMPTY_ANNOTATIONS)
   const removeAnnotation = useAnnotationStore((s) => s.removeAnnotation)
   const selectedId = useUIStore((s) => s.selectedAnnotationId)
   const setSelected = useUIStore((s) => s.setSelectedAnnotation)
 
+  const annotations = allAnnotations.filter((a) => a.type !== 'classification')
   const labelMap = new Map(labels.map((l) => [l.id, l]))
 
   return (

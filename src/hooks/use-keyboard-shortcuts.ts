@@ -10,6 +10,9 @@ interface UseKeyboardShortcutsOptions {
   imageCount: number
   onExport?: () => void
   locked?: boolean
+  mode?: 'annotate' | 'classify'
+  labelKeyBindings?: Record<string, string>
+  onToggleClassification?: (labelId: string) => void
 }
 
 export function useKeyboardShortcuts({
@@ -18,12 +21,24 @@ export function useKeyboardShortcuts({
   imageCount,
   onExport,
   locked = false,
+  mode = 'annotate',
+  labelKeyBindings,
+  onToggleClassification,
 }: UseKeyboardShortcutsOptions) {
   const annotationStore = useAnnotationStoreApi()
   const uiStore = useUIStoreApi()
 
   useEffect(() => {
     const sc = { ...DEFAULT_SHORTCUTS, ...overrides }
+    const isClassify = mode === 'classify'
+
+    // Build reverse map: key → labelId for custom bindings
+    const keyToLabelId = new Map<string, string>()
+    if (labelKeyBindings) {
+      for (const [labelId, key] of Object.entries(labelKeyBindings)) {
+        keyToLabelId.set(key.toLowerCase(), labelId)
+      }
+    }
 
     const handler = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement
@@ -38,17 +53,34 @@ export function useKeyboardShortcuts({
         return
       }
 
-      if (matchesShortcut(e, sc['tool.draw'])) {
-        if (locked) return
+      // Enter key → next image (both modes)
+      if (matchesShortcut(e, sc['image.confirm'])) {
         e.preventDefault()
-        uiStore.getState().setTool('draw')
-      } else if (matchesShortcut(e, sc['tool.select'])) {
+        const ui = uiStore.getState()
+        if (ui.currentImageIndex < imageCount - 1) {
+          ui.setCurrentImageIndex(ui.currentImageIndex + 1)
+        }
+        return
+      }
+
+      // In classify mode, suppress draw/polygon tool shortcuts
+      if (!isClassify) {
+        if (matchesShortcut(e, sc['tool.draw'])) {
+          if (locked) return
+          e.preventDefault()
+          uiStore.getState().setTool('draw')
+          return
+        } else if (matchesShortcut(e, sc['tool.polygon'])) {
+          if (locked) return
+          e.preventDefault()
+          uiStore.getState().setTool('polygon')
+          return
+        }
+      }
+
+      if (matchesShortcut(e, sc['tool.select'])) {
         e.preventDefault()
         uiStore.getState().setTool('select')
-      } else if (matchesShortcut(e, sc['tool.polygon'])) {
-        if (locked) return
-        e.preventDefault()
-        uiStore.getState().setTool('polygon')
       } else if (matchesShortcut(e, sc['tool.pan'])) {
         e.preventDefault()
         uiStore.getState().setTool('pan')
@@ -57,9 +89,6 @@ export function useKeyboardShortcuts({
         const ui = uiStore.getState()
         if (ui.selectedAnnotationId) {
           e.preventDefault()
-          const idx = ui.currentImageIndex
-          const imgAnnotations = annotationStore.getState().getAnnotations('')
-          // Find the imageId from the selected annotation
           const allAnnotations = annotationStore.getState().annotations
           for (const [imageId, anns] of Object.entries(allAnnotations)) {
             const found = anns.find((a) => a.id === ui.selectedAnnotationId)
@@ -103,21 +132,42 @@ export function useKeyboardShortcuts({
         onExport?.()
       } else if (e.key >= '1' && e.key <= '9' && !e.ctrlKey && !e.metaKey) {
         if (locked) return
+        e.preventDefault()
         const index = parseInt(e.key, 10) - 1
-        const favorites = uiStore.getState().favoriteLabelIds
-        if (favorites.length > 0) {
-          if (index < favorites.length) {
-            e.preventDefault()
-            uiStore.getState().setActiveLabel(favorites[index])
+
+        if (isClassify && onToggleClassification) {
+          // In classify mode, 1-9 toggles classification labels
+          const favorites = uiStore.getState().favoriteLabelIds
+          if (favorites.length > 0) {
+            if (index < favorites.length) {
+              onToggleClassification(favorites[index])
+            }
+          } else if (index < labels.length) {
+            onToggleClassification(labels[index].id)
           }
-        } else if (index < labels.length) {
+        } else {
+          // In annotate mode, 1-9 sets active label
+          const favorites = uiStore.getState().favoriteLabelIds
+          if (favorites.length > 0) {
+            if (index < favorites.length) {
+              uiStore.getState().setActiveLabel(favorites[index])
+            }
+          } else if (index < labels.length) {
+            uiStore.getState().setActiveLabel(labels[index].id)
+          }
+        }
+      } else if (isClassify && onToggleClassification && !e.ctrlKey && !e.metaKey) {
+        // Custom key bindings in classify mode
+        const labelId = keyToLabelId.get(e.key.toLowerCase())
+        if (labelId) {
+          if (locked) return
           e.preventDefault()
-          uiStore.getState().setActiveLabel(labels[index].id)
+          onToggleClassification(labelId)
         }
       }
     }
 
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [overrides, labels, imageCount, onExport, locked, annotationStore, uiStore])
+  }, [overrides, labels, imageCount, onExport, locked, annotationStore, uiStore, mode, labelKeyBindings, onToggleClassification])
 }

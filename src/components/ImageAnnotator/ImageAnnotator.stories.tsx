@@ -250,6 +250,66 @@ export const NoIcons: Story = {
   ),
 }
 
+export const ClassificationMode: Story = {
+  args: {
+    images,
+    labels,
+    mode: 'classify',
+    onAnnotationsChange: fn(),
+    onExport: fn(),
+  },
+  render: (args) => (
+    <div style={{ height: '100vh' }}>
+      <ImageAnnotator {...args} />
+    </div>
+  ),
+}
+
+export const ClassificationWithKeyBindings: Story = {
+  args: {
+    images,
+    labels,
+    mode: 'classify',
+    labelKeyBindings: {
+      cat: 'u',
+      dog: 'i',
+      bird: 'o',
+      car: 'j',
+      person: 'k',
+    },
+    onAnnotationsChange: fn(),
+    onExport: fn(),
+  },
+  render: (args) => (
+    <div style={{ height: '100vh' }}>
+      <ImageAnnotator {...args} />
+    </div>
+  ),
+}
+
+export const ClassificationWithFavorites: Story = {
+  args: {
+    images,
+    labels,
+    mode: 'classify',
+    initialFavorites: ['cat', 'dog', 'bird'],
+    initialAnnotations: {
+      'img-1': [
+        { id: 'cls-1', imageId: 'img-1', labelId: 'cat', type: 'classification' as const, box: { x: 0, y: 0, width: 1, height: 1 } },
+        { id: 'cls-2', imageId: 'img-1', labelId: 'bird', type: 'classification' as const, box: { x: 0, y: 0, width: 1, height: 1 } },
+      ],
+    },
+    onAnnotationsChange: fn(),
+    onFavoritesChange: fn(),
+    onExport: fn(),
+  },
+  render: (args) => (
+    <div style={{ height: '100vh' }}>
+      <ImageAnnotator {...args} />
+    </div>
+  ),
+}
+
 export const WithDataPreview: Story = {
   args: {
     images,

@@ -1,6 +1,6 @@
 {
   "name": "@fairu/annotate",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "YOLO image annotation component for React",
   "type": "module",
   "main": "./dist/fairu-annotate.cjs",

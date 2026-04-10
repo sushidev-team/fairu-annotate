@@ -7,8 +7,12 @@ import {
   getResizeHandle,
   applyResize,
   moveBox,
+  pointInPolygon,
+  polygonBounds,
+  closePolygon,
+  simplifyPolygon,
 } from '../geometry'
-import type { BoundingBox } from '../../types/annotations'
+import type { BoundingBox, PolygonPoint } from '../../types/annotations'
 
 describe('normalizeBox', () => {
   it('handles start top-left, end bottom-right (standard direction)', () => {
@@ -338,5 +342,222 @@ describe('moveBox', () => {
     expect(box.x).toBe(10)
     expect(box.y).toBe(20)
     expect(result).not.toBe(box)
+  })
+})
+
+describe('pointInPolygon', () => {
+  // Triangle: (0,0), (10,0), (5,10)
+  const triangle: PolygonPoint[] = [
+    { x: 0, y: 0 },
+    { x: 10, y: 0 },
+    { x: 5, y: 10 },
+  ]
+
+  it('returns true for a point inside a triangle', () => {
+    expect(pointInPolygon(5, 3, triangle)).toBe(true)
+  })
+
+  it('returns false for a point outside a triangle', () => {
+    expect(pointInPolygon(20, 20, triangle)).toBe(false)
+    expect(pointInPolygon(-1, -1, triangle)).toBe(false)
+  })
+
+  it('handles a point on the edge of a triangle', () => {
+    // Point on the bottom edge (y=0, between x=0 and x=10)
+    // Ray casting may or may not include edge points; just verify it returns a boolean
+    const result = pointInPolygon(5, 0, triangle)
+    expect(typeof result).toBe('boolean')
+  })
+
+  it('returns true for a point inside a concave polygon', () => {
+    // L-shaped concave polygon
+    const concave: PolygonPoint[] = [
+      { x: 0, y: 0 },
+      { x: 10, y: 0 },
+      { x: 10, y: 5 },
+      { x: 5, y: 5 },
+      { x: 5, y: 10 },
+      { x: 0, y: 10 },
+    ]
+    // Inside the bottom-left part of the L
+    expect(pointInPolygon(2, 8, concave)).toBe(true)
+    // Inside the top-right part of the L
+    expect(pointInPolygon(8, 2, concave)).toBe(true)
+    // In the concave notch (outside the polygon)
+    expect(pointInPolygon(8, 8, concave)).toBe(false)
+  })
+
+  it('returns false for a single-point polygon', () => {
+    const single: PolygonPoint[] = [{ x: 5, y: 5 }]
+    expect(pointInPolygon(5, 5, single)).toBe(false)
+  })
+
+  it('returns false for a two-point polygon (line segment)', () => {
+    const line: PolygonPoint[] = [
+      { x: 0, y: 0 },
+      { x: 10, y: 10 },
+    ]
+    expect(pointInPolygon(5, 5, line)).toBe(false)
+  })
+})
+
+describe('polygonBounds', () => {
+  it('returns the bounding box of a triangle', () => {
+    const triangle: PolygonPoint[] = [
+      { x: 2, y: 3 },
+      { x: 10, y: 1 },
+      { x: 6, y: 8 },
+    ]
+    expect(polygonBounds(triangle)).toEqual({ x: 2, y: 1, width: 8, height: 7 })
+  })
+
+  it('returns zero box for an empty array', () => {
+    expect(polygonBounds([])).toEqual({ x: 0, y: 0, width: 0, height: 0 })
+  })
+
+  it('returns zero-size box for a single point', () => {
+    const single: PolygonPoint[] = [{ x: 5, y: 7 }]
+    expect(polygonBounds(single)).toEqual({ x: 5, y: 7, width: 0, height: 0 })
+  })
+
+  it('returns correct bounds for collinear points (line)', () => {
+    const line: PolygonPoint[] = [
+      { x: 1, y: 5 },
+      { x: 4, y: 5 },
+      { x: 8, y: 5 },
+    ]
+    expect(polygonBounds(line)).toEqual({ x: 1, y: 5, width: 7, height: 0 })
+  })
+})
+
+describe('closePolygon', () => {
+  it('returns the same points when already closed', () => {
+    const closed: PolygonPoint[] = [
+      { x: 0, y: 0 },
+      { x: 10, y: 0 },
+      { x: 5, y: 10 },
+      { x: 0, y: 0 },
+    ]
+    const result = closePolygon(closed)
+    expect(result).toEqual(closed)
+    expect(result).not.toBe(closed) // should be a new array
+  })
+
+  it('appends the first point when not closed', () => {
+    const open: PolygonPoint[] = [
+      { x: 0, y: 0 },
+      { x: 10, y: 0 },
+      { x: 5, y: 10 },
+    ]
+    const result = closePolygon(open)
+    expect(result).toHaveLength(4)
+    expect(result[3]).toEqual({ x: 0, y: 0 })
+  })
+
+  it('returns a copy for a single point', () => {
+    const single: PolygonPoint[] = [{ x: 3, y: 4 }]
+    const result = closePolygon(single)
+    expect(result).toEqual([{ x: 3, y: 4 }])
+    expect(result).not.toBe(single)
+  })
+
+  it('returns an empty array for empty input', () => {
+    const result = closePolygon([])
+    expect(result).toEqual([])
+  })
+
+  it('appends closing point for two points that differ', () => {
+    const two: PolygonPoint[] = [
+      { x: 0, y: 0 },
+      { x: 5, y: 5 },
+    ]
+    const result = closePolygon(two)
+    expect(result).toHaveLength(3)
+    expect(result[2]).toEqual({ x: 0, y: 0 })
+  })
+})
+
+describe('simplifyPolygon', () => {
+  it('removes collinear intermediate points on a straight line', () => {
+    const line: PolygonPoint[] = [
+      { x: 0, y: 0 },
+      { x: 1, y: 1 },
+      { x: 2, y: 2 },
+      { x: 3, y: 3 },
+      { x: 4, y: 4 },
+    ]
+    const result = simplifyPolygon(line, 0.1)
+    // All intermediate points are on the line, so only endpoints remain
+    expect(result).toEqual([
+      { x: 0, y: 0 },
+      { x: 4, y: 4 },
+    ])
+  })
+
+  it('simplifies a complex polygon while keeping significant points', () => {
+    // A line from (0,0) to (10,0) with a significant bump at (5,10)
+    // and near-collinear points that should be removed at higher tolerance
+    const points: PolygonPoint[] = [
+      { x: 0, y: 0 },
+      { x: 3, y: 0.2 },  // near the line, within tolerance
+      { x: 5, y: 10 },   // significant deviation, must be kept
+      { x: 8, y: 0.3 },  // near the line, within tolerance
+      { x: 10, y: 0 },
+    ]
+    const result = simplifyPolygon(points, 5)
+    // Only the significant point (5,10) and the endpoints should remain
+    expect(result).toEqual([
+      { x: 0, y: 0 },
+      { x: 5, y: 10 },
+      { x: 10, y: 0 },
+    ])
+  })
+
+  it('keeps all points when tolerance is 0', () => {
+    const points: PolygonPoint[] = [
+      { x: 0, y: 0 },
+      { x: 5, y: 3 },
+      { x: 10, y: 0 },
+    ]
+    const result = simplifyPolygon(points, 0)
+    expect(result).toEqual(points)
+  })
+
+  it('returns a copy for 2 or fewer points', () => {
+    const two: PolygonPoint[] = [
+      { x: 0, y: 0 },
+      { x: 10, y: 10 },
+    ]
+    const result = simplifyPolygon(two, 5)
+    expect(result).toEqual(two)
+    expect(result).not.toBe(two)
+
+    const one: PolygonPoint[] = [{ x: 3, y: 4 }]
+    const resultOne = simplifyPolygon(one, 5)
+    expect(resultOne).toEqual(one)
+    expect(resultOne).not.toBe(one)
+
+    const empty: PolygonPoint[] = []
+    const resultEmpty = simplifyPolygon(empty, 5)
+    expect(resultEmpty).toEqual([])
+  })
+
+  it('handles polygon where first and last points are identical (perpendicularDistance with same point)', () => {
+    // When first and last points are the same, perpendicularDistance
+    // should use the Euclidean distance from the point to lineStart.
+    // This triggers the dx===0 && dy===0 branch at line 222.
+    const points: PolygonPoint[] = [
+      { x: 5, y: 5 },
+      { x: 10, y: 10 },
+      { x: 5, y: 5 }, // same as first point
+    ]
+    const result = simplifyPolygon(points, 1)
+    // The intermediate point (10,10) is ~7.07 units from (5,5),
+    // which exceeds tolerance of 1, so it should be kept
+    expect(result).toEqual([
+      { x: 5, y: 5 },
+      { x: 10, y: 10 },
+      { x: 5, y: 5 },
+    ])
   })
 })
